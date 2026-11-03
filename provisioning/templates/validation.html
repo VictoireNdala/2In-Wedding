@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<title>Validation phonétique — Provisioning NFC</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.3rem; }
+  .filtre { margin-bottom: 1.5rem; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+  input[type=text] { width: 100%; box-sizing: border-box; padding: 0.3rem; }
+  button { padding: 0.3rem 0.8rem; margin-right: 0.3rem; cursor: pointer; }
+  tr.confirme { opacity: 0.4; }
+  .vide { color: #777; font-style: italic; }
+  .barre-action { margin-top: 1.5rem; }
+</style>
+</head>
+<body>
+  <h1>Validation phonétique</h1>
+
+  <div class="filtre">
+    <label>Événement :
+      <select onchange="location.href = this.value ? '/?event_id=' + this.value : '/'">
+        <option value="">Tous</option>
+        {% for e in events %}
+          <option value="{{ e.id }}" {% if event_id == e.id %}selected{% endif %}>{{ e.name }}</option>
+        {% endfor %}
+      </select>
+    </label>
+  </div>
+
+  {% if noms %}
+  <table>
+    <thead><tr><th>Nom</th><th>IPA proposé</th><th>Aperçu</th><th>Action</th></tr></thead>
+    <tbody id="corps-table">
+      {% for n in noms %}
+      <tr data-nom="{{ n.nom }}">
+        <td>{{ n.nom }}</td>
+        <td><input type="text" class="champ-ipa" value="{{ n.ipa_propose }}" placeholder="ex: ilˈuŋga"></td>
+        <td>
+          <button onclick="ecouter(this)">Écouter</button>
+          <audio class="lecteur" controls style="display:none; height:2rem; vertical-align:middle;"></audio>
+        </td>
+        <td><button onclick="confirmer(this)">Confirmer</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <div class="barre-action">
+    <button onclick="publierLexique()">Publier le lexique Polly</button>
+  </div>
+  {% else %}
+  <p class="vide">Aucun nom en attente de validation.</p>
+  {% endif %}
+
+<script>
+function ligneDe(bouton) { return bouton.closest("tr"); }
+
+async function ecouter(bouton) {
+  const tr = ligneDe(bouton);
+  const nom = tr.dataset.nom;
+  const ipa = tr.querySelector(".champ-ipa").value.trim();
+  if (!ipa) { alert("Entrez un IPA avant d'écouter."); return; }
+  const resp = await fetch("/api/apercu", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom, ipa})
+  });
+  const data = await resp.json();
+  const audio = tr.querySelector(".lecteur");
+  audio.src = data.audio_url;
+  audio.style.display = "inline-block";
+  audio.play();
+}
+
+async function confirmer(bouton) {
+  const tr = ligneDe(bouton);
+  const nom = tr.dataset.nom;
+  const ipa = tr.querySelector(".champ-ipa").value.trim();
+  if (!ipa) { alert("Entrez un IPA avant de confirmer."); return; }
+  await fetch("/api/confirmer", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({nom, ipa})
+  });
+  tr.classList.add("confirme");
+  bouton.disabled = true;
+}
+
+async function publierLexique() {
+  const resp = await fetch("/api/publier", {method: "POST"});
+  const data = await resp.json();
+  alert("Lexique(s) publié(s) : " + data.lexiques.join(", "));
+}
+</script>
+</body>
+</html>
